@@ -93,12 +93,11 @@ impl Scanner {
         let mut start;
         let mut line = 1;
 
-        // advance
+        // loop through all tokens in the source
         while !self.at_end() {
             start = self.current;
 
             let first_char = self.peek();
-            self.advance();
             let kind = match first_char {
                 // single character tokens
                 '(' => Some(TokenKind::LeftParen),
@@ -111,10 +110,10 @@ impl Scanner {
                 '+' => Some(TokenKind::Plus),
                 ';' => Some(TokenKind::SemiColon),
                 '/' => {
-                    // check if token is a comment
+                    // check if next token is a comment
                     if self.match_next('/') {
-                        self.advance();
-                        while (self.peek() != '\n') && !self.at_end() {
+                        // self.advance();
+                        while (self.peek_next() != '\n') && !self.at_end() {
                             self.advance();
                         }
                         None
@@ -155,50 +154,58 @@ impl Scanner {
                     None
                 }
 
-                '"' => {
+                '"' => 'ret: {
                     let mut delta_lines = 0;
-                    while (self.peek() != '"') && (!self.at_end()) {
+                    while (self.peek_next() != '"') && !self.at_end() {
                         if self.peek() == '\n' {
                             delta_lines += 1;
                         }
                         self.advance();
                     }
 
+                    // advance position to ending quote
+                    self.advance();
+
                     if self.at_end() {
                         eprintln!("[Error]: Unterminated string starting at line {line}.");
+                        break 'ret None;
                     }
 
                     line += delta_lines;
 
-                    // go past the closing "
-                    self.advance();
-
-                    let str_literal = self.src[start + 1..self.current - 1].to_string();
+                    // don't want the quotes to be part of the rust string representation
+                    let str_literal = self.src[start + 1..self.current].to_string();
                     Some(TokenKind::String(str_literal))
                 }
 
+                // other cases: number, identifier
                 _ => {
                     // check if the char is a digit
                     if first_char.is_ascii_digit() {
-                        while self.peek().is_ascii_digit() {
+                        while self.peek_next().is_ascii_digit() {
                             self.advance();
                         }
 
-                        // we're at the end of the first part of the number,
+                        // We're at the end of the first part of the number,
                         // but there may be a fractional component to the literal,
                         // so we look for that too.
                         // Have to check if the char after the period is a digit too, since
-                        // we don't allow literals like "1234."
-                        if self.peek() == '.' && self.peek_next().is_ascii_digit() {
-                            // go past the '.'
+                        // we don't allow literals like '1234.'
+                        if self.peek_next() == '.' {
+                            // advance cursor position to '.'
                             self.advance();
 
-                            while self.peek().is_ascii_digit() {
+                            // case where number is something like '1234.'
+                            if !self.peek_next().is_ascii_digit() {
+                                eprintln!("[Error]: Invalid number literal at line {line}");
+                            }
+
+                            while self.peek_next().is_ascii_digit() {
                                 self.advance();
                             }
                         }
 
-                        if let Ok(num) = self.src[start..self.current].parse::<f32>() {
+                        if let Ok(num) = self.src[start..self.current + 1].parse::<f32>() {
                             Some(TokenKind::Number(num))
                         } else {
                             eprintln!("[Interpreter Error]: Failed to parse number literal at line {line}");
@@ -206,11 +213,11 @@ impl Scanner {
                         }
                     // check if char is the start of an identifier
                     } else if first_char.is_alphabetic() {
-                        while self.peek().is_alphanumeric() {
+                        while self.peek_next().is_alphanumeric() {
                             self.advance();
                         }
 
-                        let identifier = &self.src[start..self.current];
+                        let identifier = &self.src[start..self.current + 1];
                         match identifier {
                             "and" => Some(TokenKind::And),
                             "class" => Some(TokenKind::Class),
@@ -238,9 +245,12 @@ impl Scanner {
             };
 
             if let Some(kind) = kind {
-                let lexeme = &self.src[start..self.current];
+                let lexeme = &self.src[start..self.current + 1];
                 tokens.push(Token::new(kind, lexeme.into(), line))
             }
+
+            // set position to the start of the next token
+            self.advance();
         }
 
         tokens.push(Token::new(TokenKind::Eof, String::new(), line));
@@ -271,7 +281,6 @@ impl Scanner {
     }
 
     /// Return the character in `self.src` one after the current position.
-    #[inline]
     fn peek_next(&self) -> char {
         if (self.current + 1) >= self.chars.len() {
             '\0'
@@ -291,3 +300,4 @@ impl Scanner {
         }
     }
 }
+

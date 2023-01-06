@@ -1,10 +1,8 @@
-mod scanner;
-
 use std::{path::Path, io::Write};
 use std::fs::read_to_string;
 use anyhow::{bail, Context};
 use anyhow::Result;
-use crate::scanner::Scanner;
+use lox::scanner::Scanner;
 
 fn main() -> Result<()> {
     match std::env::args().count() {

@@ -54,7 +54,7 @@ pub enum TokenKind {
 #[allow(dead_code)]
 #[derive(Debug)]
 pub struct Token {
-    kind: TokenKind,
+    pub kind: TokenKind,
     pub lexeme: String,
     line: usize,
 }

@@ -34,7 +34,7 @@ fn run_prompt() -> Result<()> {
             Ok(_) => {
                 let tokens = Scanner::new(input.clone()).scan();
                 for token in tokens {
-                    println!("{:?}", token.lexeme);
+                    println!("{}", token);
                 }
                 // println!("{tokens:?}");
             }

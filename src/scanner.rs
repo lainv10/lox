@@ -1,9 +1,10 @@
 use std::fmt::Display;
+use thiserror::Error;
 
 type Number = f32;
 
 #[derive(Debug)]
-pub enum TokenKind {
+pub enum Token {
     // Punctuation / Single character token
     LeftParen,
     RightParen,
@@ -50,78 +51,78 @@ pub enum TokenKind {
     Var,
     While,
 
+    /// End of file
     Eof,
 }
 
-impl Display for TokenKind {
+impl Display for Token {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            TokenKind::Identifier(id) => write!(f, "{id}"),
-            TokenKind::String(s) => {
+            Token::Identifier(id) => write!(f, "{id}"),
+            Token::String(s) => {
                 write!(f, "\"{s}\"")
             }
-            TokenKind::Number(n) => {
+            Token::Number(n) => {
                 write!(f, "{n}")
             }
 
-            _ => {
-                let display = match self {
-                    TokenKind::LeftParen => "(",
-                    TokenKind::RightParen => ")",
-                    TokenKind::LeftBrace => "{",
-                    TokenKind::RightBrace => "}",
-                    TokenKind::Comma => ",",
-                    TokenKind::Dot => ".",
-                    TokenKind::Minus => "-",
-                    TokenKind::Plus => "+",
-                    TokenKind::SemiColon => ";",
-                    TokenKind::Star => "*",
-                    TokenKind::Slash => "/",
-                    TokenKind::Bang => "!",
-                    TokenKind::BangEqual => "!=",
-                    TokenKind::Equal => "=",
-                    TokenKind::EqualEqual => "==",
-                    TokenKind::Greater => ">",
-                    TokenKind::GreaterEqual => ">=",
-                    TokenKind::Less => "<",
-                    TokenKind::LessEqual => "<=",
-                    TokenKind::And => "and",
-                    TokenKind::Class => "class",
-                    TokenKind::Else => "else",
-                    TokenKind::False => "false",
-                    TokenKind::Fun => "fun",
-                    TokenKind::For => "for",
-                    TokenKind::If => "if",
-                    TokenKind::Nil => "nil",
-                    TokenKind::Or => "or",
-                    TokenKind::Print => "print",
-                    TokenKind::Return => "return",
-                    TokenKind::Super => "super",
-                    TokenKind::This => "this",
-                    TokenKind::True => "true",
-                    TokenKind::Var => "var",
-                    TokenKind::While => "while",
-                    TokenKind::Eof => "eof",
+            _ => write!(
+                f,
+                "{}",
+                match self {
+                    Token::LeftParen => "(",
+                    Token::RightParen => ")",
+                    Token::LeftBrace => "{",
+                    Token::RightBrace => "}",
+                    Token::Comma => ",",
+                    Token::Dot => ".",
+                    Token::Minus => "-",
+                    Token::Plus => "+",
+                    Token::SemiColon => ";",
+                    Token::Star => "*",
+                    Token::Slash => "/",
+                    Token::Bang => "!",
+                    Token::BangEqual => "!=",
+                    Token::Equal => "=",
+                    Token::EqualEqual => "==",
+                    Token::Greater => ">",
+                    Token::GreaterEqual => ">=",
+                    Token::Less => "<",
+                    Token::LessEqual => "<=",
+                    Token::And => "and",
+                    Token::Class => "class",
+                    Token::Else => "else",
+                    Token::False => "false",
+                    Token::Fun => "fun",
+                    Token::For => "for",
+                    Token::If => "if",
+                    Token::Nil => "nil",
+                    Token::Or => "or",
+                    Token::Print => "print",
+                    Token::Return => "return",
+                    Token::Super => "super",
+                    Token::This => "this",
+                    Token::True => "true",
+                    Token::Var => "var",
+                    Token::While => "while",
+                    Token::Eof => "",
                     _ => unreachable!(),
-                };
-                write!(f, "{}", display)
-            }
+                }
+            ),
         }
     }
 }
 
-#[allow(dead_code)]
-#[derive(Debug)]
-pub struct Token {
-    pub kind: TokenKind,
-    pub lexeme: String,
-    line: usize,
-}
+#[derive(Error, Debug)]
+pub enum ScannerError {
+    #[error("Unknown token at line {0}")]
+    UnknownToken(usize),
 
-impl Token {
-    pub fn new(kind: TokenKind, lexeme: String, line: usize) -> Self {
-        Self { kind, lexeme, line }
-    }
+    #[error("Unterminated string starting at line {0}")]
+    UnterminatedString(usize),
+
+    #[error("Invalid number literal at line {0}")]
+    InvalidNumber(usize),
 }
 
 pub struct Scanner {
@@ -139,6 +140,9 @@ pub struct Scanner {
 
     /// The current line number in the source code the `Scanner` is processing.
     line: usize,
+
+    /// Errors collected while scanning the source.
+    errors: Vec<ScannerError>,
 }
 
 impl Scanner {
@@ -151,6 +155,7 @@ impl Scanner {
             current: 0,
             start: 0,
             line: 1,
+            errors: Default::default(),
         }
     }
 
@@ -163,150 +168,145 @@ impl Scanner {
             self.start = self.current;
 
             // add token
-            if let Some(token_kind) = self.scan_token() {
-                let lexeme = token_kind.to_string();
-                tokens.push(Token::new(token_kind, lexeme, self.line))
+            match self.scan_token() {
+                Ok(Some(token)) => tokens.push(token),
+                Ok(None) => (),
+                Err(e) => self.errors.push(e),
             }
 
             // set position to the start of the next token
             self.advance();
         }
 
-        tokens.push(Token::new(TokenKind::Eof, String::new(), self.line));
+        tokens.push(Token::Eof);
 
         tokens
     }
 
     /// Get the token starting at the current position of the `Scanner`.
     ///
-    /// Returns `None` if there was an error while scanning the token,
-    /// or if the token should not be scanned (e.g. whitespace and newlines).
+    /// Returns a `ScannerError` if there was an error while scanning the token,
+    ///
+    /// The result will be `None` if the token should not be scanned (whitespace, newlines, etc).
     ///
     /// Assuming the next token is valid, the `Scanner` position will
     /// be moved to the last character of the token.
     /// Whitespace and newlines will be skipped over
-    fn scan_token(&mut self) -> Option<TokenKind> {
+    fn scan_token(&mut self) -> Result<Option<Token>, ScannerError> {
         match self.peek() {
             // single character tokens
-            '(' => Some(TokenKind::LeftParen),
-            ')' => Some(TokenKind::RightParen),
-            '{' => Some(TokenKind::LeftBrace),
-            '}' => Some(TokenKind::RightBrace),
-            ',' => Some(TokenKind::Comma),
-            '.' => Some(TokenKind::Dot),
-            '-' => Some(TokenKind::Minus),
-            '+' => Some(TokenKind::Plus),
-            ';' => Some(TokenKind::SemiColon),
-            '*' => Some(TokenKind::Star),
-            '/' => self.comment_or_slash(),
+            '(' => Ok(Some(Token::LeftParen)),
+            ')' => Ok(Some(Token::RightParen)),
+            '{' => Ok(Some(Token::LeftBrace)),
+            '}' => Ok(Some(Token::RightBrace)),
+            ',' => Ok(Some(Token::Comma)),
+            '.' => Ok(Some(Token::Dot)),
+            '-' => Ok(Some(Token::Minus)),
+            '+' => Ok(Some(Token::Plus)),
+            ';' => Ok(Some(Token::SemiColon)),
+            '*' => Ok(Some(Token::Star)),
+            '/' => Ok(self.comment_or_slash()),
 
             // handle two character tokens
-            '!' | '=' | '<' | '>' => self.two_char_token(),
+            '!' | '=' | '<' | '>' => Ok(self.two_char_token()),
 
             // skip over whitespace
-            ' ' | '\r' | '\t' => None,
+            ' ' | '\r' | '\t' => Ok(None),
 
             // increment line count on \n
             '\n' => {
                 self.line += 1;
-                None
+                Ok(None)
             }
 
-            '"' => self.string(),
+            '"' => self.string().map(Some),
 
-            c if c.is_ascii_digit() => self.number(),
+            c if c.is_ascii_digit() => self.number().map(Some),
 
-            c if c.is_alphabetic() => self.identifier(),
+            c if c.is_alphabetic() => Ok(Some(self.identifier())),
 
-            _ => {
-                eprintln!("[Error]: Invalid token '{}'", self.peek());
-                None
-            }
+            _ => Err(ScannerError::UnknownToken(self.line)),
         }
     }
 
     /// Handle identifier tokens. Should be called when the `Scanner`
     /// is processing an alphanumeric character as the start of a new token.
     ///
-    /// Returns a `TokenKind` represnting a keyword if the identifier is a keyword.
+    /// Returns a token represnting a keyword if the identifier is a keyword.
     /// Otherwise, it returns an identifier token.
     ///
     /// This will advance the `Scanner` position to the end of the identifier token.
-    fn identifier(&mut self) -> Option<TokenKind> {
+    fn identifier(&mut self) -> Token {
         while self.peek_next().is_alphanumeric() {
             self.advance();
         }
         let identifier = &self.src[self.start..self.current + 1];
         match identifier {
-            "and" => Some(TokenKind::And),
-            "class" => Some(TokenKind::Class),
-            "else" => Some(TokenKind::Else),
-            "false" => Some(TokenKind::False),
-            "fun" => Some(TokenKind::Fun),
-            "for" => Some(TokenKind::For),
-            "if" => Some(TokenKind::If),
-            "nil" => Some(TokenKind::Nil),
-            "or" => Some(TokenKind::Or),
-            "print" => Some(TokenKind::Print),
-            "return" => Some(TokenKind::Return),
-            "super" => Some(TokenKind::Super),
-            "this" => Some(TokenKind::This),
-            "true" => Some(TokenKind::True),
-            "var" => Some(TokenKind::Var),
-            "while" => Some(TokenKind::While),
-            _ => Some(TokenKind::Identifier(identifier.to_string())),
+            "and" => Token::And,
+            "class" => Token::Class,
+            "else" => Token::Else,
+            "false" => Token::False,
+            "fun" => Token::Fun,
+            "for" => Token::For,
+            "if" => Token::If,
+            "nil" => Token::Nil,
+            "or" => Token::Or,
+            "print" => Token::Print,
+            "return" => Token::Return,
+            "super" => Token::Super,
+            "this" => Token::This,
+            "true" => Token::True,
+            "var" => Token::Var,
+            "while" => Token::While,
+            _ => Token::Identifier(identifier.to_string()),
         }
     }
 
     /// Handle number tokens. Should be called when the `Scanner` is
     /// processing a digit 0-9.
     ///
-    /// Returns the appropriate number token, or `None` if the number
+    /// Returns the appropriate number token, or a `ScannerError` if the number
     /// could not be parsed.
     ///
     /// This will advance the `Scanner` position to the end of the number token.
-    fn number(&mut self) -> Option<TokenKind> {
+    fn number(&mut self) -> Result<Token, ScannerError> {
         while self.peek_next().is_ascii_digit() {
             self.advance();
         }
         // We're at the end of the first part of the number,
         // but there may be a fractional component to the literal,
         // so we look for that too.
-        // Have to check if the char after the period is a digit too, since
-        // we don't allow literals like '1234.'
+        // Have to check if the char after the period is a digit too,
+        // since we don't allow literals like '1234.'
         if self.peek_next() == '.' {
             // advance cursor position to '.'
             self.advance();
 
             // case where number is something like '1234.'
             if !self.peek_next().is_ascii_digit() {
-                eprintln!("[Error]: Invalid number literal at line {}", self.line);
+                return Err(ScannerError::InvalidNumber(self.line));
             }
 
             while self.peek_next().is_ascii_digit() {
                 self.advance();
             }
         }
-        if let Ok(num) = self.src[self.start..self.current + 1].parse::<f32>() {
-            Some(TokenKind::Number(num))
-        } else {
-            eprintln!(
-                "[Interpreter Error]: Failed to parse number literal at line {}",
-                self.line
-            );
-            None
-        }
+
+        let num = self.src[self.start..self.current + 1]
+            .parse::<f32>()
+            .unwrap();
+        Ok(Token::Number(num))
     }
 
     /// Handle literal string tokens. This function should be called when the `Scanner` is
     /// currently on a quote character.
     ///
-    /// Returns the appropriate `TokenKind`,
-    /// else `None` if there's an error (e.g. unterminated string)
+    /// Returns the appropriate token,
+    /// else a `ScannerError` if there's an error (e.g. unterminated string).
     ///
     /// This will advance the `Scanner` position to the end of the string
     /// literal token (at the end quote character).
-    fn string(&mut self) -> Option<TokenKind> {
+    fn string(&mut self) -> Result<Token, ScannerError> {
         let mut delta_lines = 0;
         while (self.peek_next() != '"') && !self.at_end() {
             if self.peek() == '\n' {
@@ -319,47 +319,44 @@ impl Scanner {
         self.advance();
 
         if self.at_end() {
-            eprintln!(
-                "[Error]: Unterminated string starting at line {}.",
-                self.line
-            );
-            return None;
+            return Err(ScannerError::UnterminatedString(self.line));
         }
 
         self.line += delta_lines;
 
         // we don't want the quotes to be part of the rust string representation
         let str_literal = self.src[self.start + 1..self.current].to_string();
-        Some(TokenKind::String(str_literal))
+        Ok(Token::String(str_literal))
     }
 
     /// Handle tokens that are two characters long. This function can be called
     /// if the scanner is currently on a character that either resolves to a single
     /// token, or is the start of a two character token, e.g. '!', '>'.
     ///
-    /// Returns the appropriate `TokenKind` for the one or two character token.
+    /// Returns the appropriate token for the one or two character token.
     /// Returns `None` if none of the one or two character tokens can be matched.
     ///
     /// This function will advance the `Scanner` position to the end of the token (if found).
-    fn two_char_token(&mut self) -> Option<TokenKind> {
+    fn two_char_token(&mut self) -> Option<Token> {
         let first_char = self.peek();
-        let equal_next = self.match_next('=');
 
+        let equal_next = self.match_next('=');
         if equal_next {
             self.advance();
         }
+
         match (first_char, equal_next) {
-            ('!', true) => Some(TokenKind::BangEqual),
-            ('!', false) => Some(TokenKind::Bang),
+            ('!', true) => Some(Token::BangEqual),
+            ('!', false) => Some(Token::Bang),
 
-            ('=', true) => Some(TokenKind::EqualEqual),
-            ('=', false) => Some(TokenKind::Equal),
+            ('=', true) => Some(Token::EqualEqual),
+            ('=', false) => Some(Token::Equal),
 
-            ('>', true) => Some(TokenKind::GreaterEqual),
-            ('>', false) => Some(TokenKind::Greater),
+            ('>', true) => Some(Token::GreaterEqual),
+            ('>', false) => Some(Token::Greater),
 
-            ('<', true) => Some(TokenKind::LessEqual),
-            ('<', false) => Some(TokenKind::Less),
+            ('<', true) => Some(Token::LessEqual),
+            ('<', false) => Some(Token::Less),
 
             _ => None,
         }
@@ -372,7 +369,7 @@ impl Scanner {
     /// and `None` if it is a comment.
     ///
     /// This function will advance the `Scanner` position to the end of the token / comment.
-    fn comment_or_slash(&mut self) -> Option<TokenKind> {
+    fn comment_or_slash(&mut self) -> Option<Token> {
         // check if next token is a comment
         if self.match_next('/') {
             while (self.peek_next() != '\n') && !self.at_end() {
@@ -380,7 +377,7 @@ impl Scanner {
             }
             None
         } else {
-            Some(TokenKind::Slash)
+            Some(Token::Slash)
         }
     }
 

@@ -1,8 +1,8 @@
-use std::{path::Path, io::Write};
-use std::fs::read_to_string;
-use anyhow::{bail, Context};
 use anyhow::Result;
+use anyhow::{bail, Context};
 use lox::scanner::Scanner;
+use std::fs::read_to_string;
+use std::{io::Write, path::Path};
 
 fn main() -> Result<()> {
     match std::env::args().count() {
@@ -33,10 +33,7 @@ fn run_prompt() -> Result<()> {
         match stdin.read_line(&mut input) {
             Ok(_) => {
                 let tokens = Scanner::new(input.clone()).scan();
-                for token in tokens {
-                    println!("{}", token);
-                }
-                // println!("{tokens:?}");
+                dbg!(tokens);
             }
             Err(error) => eprintln!("Error reading line: {error}"),
         }

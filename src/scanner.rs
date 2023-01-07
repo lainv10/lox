@@ -129,7 +129,7 @@ pub struct Scanner {
     /// Source code string.
     src: String,
 
-    /// List of chars represnting the source string.
+    /// List of chars representing the source string.
     chars: Vec<char>,
 
     /// An index into the source string that indicates the current position of the `Scanner`.
@@ -232,7 +232,7 @@ impl Scanner {
     /// Handle identifier tokens. Should be called when the `Scanner`
     /// is processing an alphanumeric character as the start of a new token.
     ///
-    /// Returns a token represnting a keyword if the identifier is a keyword.
+    /// Returns a token representing a keyword if the identifier is a keyword.
     /// Otherwise, it returns an identifier token.
     ///
     /// This will advance the `Scanner` position to the end of the identifier token.
@@ -365,7 +365,7 @@ impl Scanner {
     /// Handle a token that starts with a '/'; it may
     /// be the start of a comment or a single slash.
     ///
-    /// Returns the appropriate `TokenKind` if is a single slash,
+    /// Returns the appropriate `Token` if is a single slash,
     /// and `None` if it is a comment.
     ///
     /// This function will advance the `Scanner` position to the end of the token / comment.

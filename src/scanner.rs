@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 type Number = f32;
 
 #[derive(Debug)]
@@ -49,6 +51,63 @@ pub enum TokenKind {
     While,
 
     Eof,
+}
+
+impl Display for TokenKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TokenKind::Identifier(id) => write!(f, "{id}"),
+            TokenKind::String(s) => {
+                write!(f, "\"{s}\"")
+            }
+            TokenKind::Number(n) => {
+                write!(f, "{n}")
+            }
+
+            _ => {
+                let display = match self {
+                    TokenKind::LeftParen => "(",
+                    TokenKind::RightParen => ")",
+                    TokenKind::LeftBrace => "{",
+                    TokenKind::RightBrace => "}",
+                    TokenKind::Comma => ",",
+                    TokenKind::Dot => ".",
+                    TokenKind::Minus => "-",
+                    TokenKind::Plus => "+",
+                    TokenKind::SemiColon => ";",
+                    TokenKind::Star => "*",
+                    TokenKind::Slash => "/",
+                    TokenKind::Bang => "!",
+                    TokenKind::BangEqual => "!=",
+                    TokenKind::Equal => "=",
+                    TokenKind::EqualEqual => "==",
+                    TokenKind::Greater => ">",
+                    TokenKind::GreaterEqual => ">=",
+                    TokenKind::Less => "<",
+                    TokenKind::LessEqual => "<=",
+                    TokenKind::And => "and",
+                    TokenKind::Class => "class",
+                    TokenKind::Else => "else",
+                    TokenKind::False => "false",
+                    TokenKind::Fun => "fun",
+                    TokenKind::For => "for",
+                    TokenKind::If => "if",
+                    TokenKind::Nil => "nil",
+                    TokenKind::Or => "or",
+                    TokenKind::Print => "print",
+                    TokenKind::Return => "return",
+                    TokenKind::Super => "super",
+                    TokenKind::This => "this",
+                    TokenKind::True => "true",
+                    TokenKind::Var => "var",
+                    TokenKind::While => "while",
+                    TokenKind::Eof => "eof",
+                    _ => unreachable!(),
+                };
+                write!(f, "{}", display)
+            }
+        }
+    }
 }
 
 #[allow(dead_code)]
@@ -105,7 +164,8 @@ impl Scanner {
 
             // add token
             if let Some(token_kind) = self.scan_token() {
-                tokens.push(Token::new(token_kind, self.lexeme(), self.line))
+                let lexeme = token_kind.to_string();
+                tokens.push(Token::new(token_kind, lexeme, self.line))
             }
 
             // set position to the start of the next token
@@ -364,10 +424,5 @@ impl Scanner {
         } else {
             self.peek_next() == to_match
         }
-    }
-
-    /// Get the current lexeme defined by the start and current positions of the `Scanner`.
-    fn lexeme(&self) -> String {
-        self.src[self.start..self.current + 1].to_string()
     }
 }
